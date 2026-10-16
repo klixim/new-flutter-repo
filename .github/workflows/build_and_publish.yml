@@ -24,7 +24,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
       # Шаг 3: Установка Flutter SDK
       - name: Set up Flutter
