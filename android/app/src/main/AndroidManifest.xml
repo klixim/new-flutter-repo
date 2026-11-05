@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.klixim.new_flutter_repo">
+
+    <!-- Разрешение на доступ к сети интернет для работы авторизации и баз данных -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="Flutter RuStore Demo"
         android:name="${applicationName}"
@@ -21,12 +25,26 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Intent Filter для обработки Deep Link перенаправлений OAuth (Supabase, Yandex, VK) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.klixim.app" android:host="auth-callback" />
+            </intent-filter>
         </activity>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
     <queries>
+        <!-- Разрешение открытия браузера для OAuth авторизации -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
