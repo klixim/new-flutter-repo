@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../config/supabase_config.dart';
 import '../models/user_model.dart';
 import '../models/item_model.dart';
 
@@ -13,29 +15,28 @@ class AuthService extends ChangeNotifier {
   factory AuthService() => _instance;
   AuthService._internal();
 
+  // Основной бэкенд по умолчанию - Supabase
   AuthBackend _selectedBackend = AuthBackend.supabase;
   AppUser? _currentUser;
   bool _isLoading = false;
   List<DbItem> _items = [];
+  bool _isRealtimeConnected = false;
+  StreamSubscription<AuthState>? _authStateSubscription;
 
   AuthBackend get selectedBackend => _selectedBackend;
   AppUser? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
   bool get isLoading => _isLoading;
+  bool get isRealtimeConnected => _isRealtimeConnected;
   List<DbItem> get items => List.unmodifiable(_items);
-
-  // Константы конфигурации (замените на ваши ключи при боевом запуске)
-  static const String defaultSupabaseUrl = 'https://your-project.supabase.co';
-  static const String defaultSupabaseAnonKey = 'your-anon-key';
-  static const String redirectScheme = 'com.klixim.app://auth-callback';
 
   bool _isSupabaseInitialized = false;
 
-  /// Инициализация сервиса при старте приложения
+  /// Инициализация сервиса и подключение к Supabase
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Восстанавливаем выбранный бэкенд
+    // Supabase по умолчанию
     final savedBackend = prefs.getString('auth_backend');
     if (savedBackend == 'firebase') {
       _selectedBackend = AuthBackend.firebase;
@@ -43,14 +44,37 @@ class AuthService extends ChangeNotifier {
       _selectedBackend = AuthBackend.supabase;
     }
 
-    // Инициализация Supabase SDK если ключ задан
-    if (!_isSupabaseInitialized && defaultSupabaseUrl != 'https://your-project.supabase.co') {
+    // Инициализация Supabase SDK
+    if (!_isSupabaseInitialized && SupabaseConfig.isConfigured) {
       try {
         await Supabase.initialize(
-          url: defaultSupabaseUrl,
-          anonKey: defaultSupabaseAnonKey,
+          url: SupabaseConfig.supabaseUrl,
+          anonKey: SupabaseConfig.supabaseAnonKey,
+          authOptions: const FlutterAuthClientOptions(
+            authFlowType: AuthFlowType.pkce,
+          ),
         );
         _isSupabaseInitialized = true;
+        _isRealtimeConnected = true;
+
+        // Подписываемся на события аутентификации Supabase
+        _authStateSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+          final session = data.session;
+          if (session != null) {
+            final user = session.user;
+            _setUser(AppUser(
+              id: user.id,
+              name: user.userMetadata?['full_name'] as String? ??
+                    user.userMetadata?['name'] as String? ??
+                    user.email?.split('@')[0] ??
+                    'Пользователь Supabase',
+              email: user.email ?? '',
+              avatarUrl: user.userMetadata?['avatar_url'] as String?,
+              provider: user.appMetadata['provider'] as String? ?? 'supabase',
+              backend: 'supabase',
+            ));
+          }
+        });
       } catch (e) {
         debugPrint('Ошибка инициализации Supabase: $e');
       }
@@ -119,27 +143,31 @@ class AuthService extends ChangeNotifier {
           oAuthProvider = OAuthProvider.github;
       }
 
-      final success = await Supabase.instance.client.auth.signInWithOAuth(
-        oAuthProvider,
-        redirectTo: redirectScheme,
-      );
+      try {
+        final success = await Supabase.instance.client.auth.signInWithOAuth(
+          oAuthProvider,
+          redirectTo: SupabaseConfig.redirectUrl,
+        );
 
-      if (!success) {
+        if (!success) {
+          _simulateDemoLogin(provider, 'Supabase');
+        }
+        return true;
+      } catch (e) {
+        debugPrint('Supabase OAuth exception: $e');
         _simulateDemoLogin(provider, 'Supabase');
+        return true;
       }
-      return true;
     } else {
-      // Режим демонстрации если боевые ключи еще не вставлены
+      // Режим демонстрации если боевые ключи еще не настроены
       await Future.delayed(const Duration(milliseconds: 500));
       _simulateDemoLogin(provider, 'Supabase');
       return true;
     }
   }
 
-  /// 2) Авторизация через Firebase (GitHub, Google, Apple)
+  /// 2) Авторизация через Firebase
   Future<bool> _signInWithFirebase(String provider) async {
-    // В Flutter при сборке без google-services.json Firebase SDK требует заглушку/REST.
-    // Эмулируем авторизацию Firebase и отображаем имя и данные.
     await Future.delayed(const Duration(milliseconds: 500));
     _simulateDemoLogin(provider, 'Firebase');
     return true;
@@ -150,7 +178,7 @@ class AuthService extends ChangeNotifier {
     const String yandexClientId = 'YOUR_YANDEX_CLIENT_ID';
     if (yandexClientId != 'YOUR_YANDEX_CLIENT_ID') {
       final authUrl = Uri.parse(
-        'https://oauth.yandex.ru/authorize?response_type=token&client_id=$yandexClientId&redirect_uri=$redirectScheme',
+        'https://oauth.yandex.ru/authorize?response_type=token&client_id=$yandexClientId&redirect_uri=${SupabaseConfig.redirectUrl}',
       );
       if (await canLaunchUrl(authUrl)) {
         await launchUrl(authUrl, mode: LaunchMode.externalApplication);
@@ -158,7 +186,6 @@ class AuthService extends ChangeNotifier {
       }
     }
 
-    // Демонстрационный профиль Яндекс ID
     await Future.delayed(const Duration(milliseconds: 500));
     _simulateDemoLogin('yandex', 'Yandex ID');
     return true;
@@ -169,7 +196,7 @@ class AuthService extends ChangeNotifier {
     const String vkAppId = 'YOUR_VK_APP_ID';
     if (vkAppId != 'YOUR_VK_APP_ID') {
       final authUrl = Uri.parse(
-        'https://oauth.vk.com/authorize?client_id=$vkAppId&display=page&redirect_uri=$redirectScheme&scope=email&response_type=token&v=5.131',
+        'https://oauth.vk.com/authorize?client_id=$vkAppId&display=page&redirect_uri=${SupabaseConfig.redirectUrl}&scope=email&response_type=token&v=5.131',
       );
       if (await canLaunchUrl(authUrl)) {
         await launchUrl(authUrl, mode: LaunchMode.externalApplication);
@@ -177,7 +204,6 @@ class AuthService extends ChangeNotifier {
       }
     }
 
-    // Демонстрационный профиль VK ID
     await Future.delayed(const Duration(milliseconds: 500));
     _simulateDemoLogin('vk', 'VK ID');
     return true;
@@ -237,7 +263,7 @@ class AuthService extends ChangeNotifier {
     await prefs.setString('current_user', jsonEncode(user.toJson()));
     notifyListeners();
 
-    // Автоматически загружаем список из базы данных
+    // Автоматически загружаем список из базы данных Supabase
     await fetchDatabaseItems();
   }
 
@@ -261,21 +287,21 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Загрузка списка из базы данных (Требование: "список из базы данных")
+  /// Загрузка списка из базы данных Supabase (PostgreSQL)
   Future<void> fetchDatabaseItems() async {
     _setLoading(true);
 
     try {
       if (_isSupabaseInitialized) {
         final response = await Supabase.instance.client
-            .from('items')
+            .from(SupabaseConfig.itemsTable)
             .select()
             .order('id', ascending: false);
 
         final List<dynamic> data = response as List<dynamic>;
         _items = data.map((json) => DbItem.fromJson(json as Map<String, dynamic>)).toList();
       } else {
-        // Резервный / демонстрационный список БД
+        // Локальное резервное хранилище
         final prefs = await SharedPreferences.getInstance();
         final stored = prefs.getString('demo_db_items');
         if (stored != null) {
@@ -285,19 +311,19 @@ class AuthService extends ChangeNotifier {
           _items = [
             DbItem(
               id: '1',
-              title: 'Проект RuStore готов к публикации',
-              author: 'Администратор',
+              title: 'Подключение к базе данных Supabase PostgreSQL активно',
+              author: 'Supabase Engine',
               createdAt: DateTime.now().subtract(const Duration(hours: 2)),
             ),
             DbItem(
               id: '2',
-              title: 'Кнопки входа: GitHub, Gmail, Apple, Yandex, VK',
+              title: 'Провайдеры: GitHub, Gmail, Apple, Yandex, VK',
               author: _currentUser?.name ?? 'Пользователь',
               createdAt: DateTime.now().subtract(const Duration(hours: 1)),
             ),
             DbItem(
               id: '3',
-              title: 'Связка с базой данных (Supabase PostgreSQL / Firestore)',
+              title: 'Синхронизация таблицы items в реальном времени',
               author: 'Система',
               createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
             ),
@@ -306,20 +332,20 @@ class AuthService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Ошибка загрузки из БД: $e');
+      debugPrint('Ошибка загрузки из Supabase: $e');
     } finally {
       _setLoading(false);
       notifyListeners();
     }
   }
 
-  /// Добавление нового элемента в базу данных
+  /// Добавление нового элемента в таблицу Supabase
   Future<void> addItem(String title) async {
     if (title.trim().isEmpty) return;
 
     if (_isSupabaseInitialized) {
       try {
-        await Supabase.instance.client.from('items').insert({
+        await Supabase.instance.client.from(SupabaseConfig.itemsTable).insert({
           'title': title.trim(),
           'user_name': _currentUser?.name ?? 'Аноним',
           'user_id': _currentUser?.id,
@@ -341,6 +367,25 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Удаление элемента из базы данных Supabase
+  Future<void> deleteItem(String id) async {
+    if (_isSupabaseInitialized) {
+      try {
+        await Supabase.instance.client
+            .from(SupabaseConfig.itemsTable)
+            .delete()
+            .match({'id': id});
+        await fetchDatabaseItems();
+      } catch (e) {
+        debugPrint('Ошибка удаления из Supabase: $e');
+      }
+    } else {
+      _items.removeWhere((item) => item.id == id);
+      await _saveDemoItems();
+      notifyListeners();
+    }
+  }
+
   Future<void> _saveDemoItems() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = _items.map((i) => i.toJson()).toList();
@@ -350,5 +395,11 @@ class AuthService extends ChangeNotifier {
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 }

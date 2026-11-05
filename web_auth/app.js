@@ -80,11 +80,21 @@ const elements = {
 // ==========================================
 
 function initConfigFields() {
-  elements.cfgSupabaseUrl.value = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || '';
-  elements.cfgSupabaseAnonKey.value = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) || '';
+  const defaultUrl = window.SUPABASE_CONFIG?.url || '';
+  const defaultKey = window.SUPABASE_CONFIG?.anonKey || '';
+
+  elements.cfgSupabaseUrl.value = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || defaultUrl;
+  elements.cfgSupabaseAnonKey.value = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) || defaultKey;
   elements.cfgFirebaseConfig.value = localStorage.getItem(STORAGE_KEYS.FIREBASE_CONFIG) || '';
   elements.cfgYandexClientId.value = localStorage.getItem(STORAGE_KEYS.YANDEX_CLIENT_ID) || '';
   elements.cfgVkAppId.value = localStorage.getItem(STORAGE_KEYS.VK_APP_ID) || '';
+
+  if (!localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) && defaultUrl) {
+    localStorage.setItem(STORAGE_KEYS.SUPABASE_URL, defaultUrl);
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) && defaultKey) {
+    localStorage.setItem(STORAGE_KEYS.SUPABASE_KEY, defaultKey);
+  }
 
   const radios = document.getElementsByName('backendPref');
   for (const r of radios) {
@@ -155,13 +165,28 @@ function updateDemoBadgeStatus() {
 // ==========================================
 
 async function initClients() {
-  const sbUrl = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL);
-  const sbKey = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY);
+  const sbUrl = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || window.SUPABASE_CONFIG?.url;
+  const sbKey = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) || window.SUPABASE_CONFIG?.anonKey;
 
-  if (sbUrl && sbKey && window.supabase) {
+  if (sbUrl && sbKey && window.supabase && !sbKey.includes('placeholder')) {
     try {
       supabaseClient = window.supabase.createClient(sbUrl, sbKey);
       
+      // Подписка на Realtime изменения таблицы Supabase items
+      try {
+        supabaseClient
+          .channel('public:items')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, (payload) => {
+            console.log('Supabase Realtime Event:', payload);
+            if (currentUser) {
+              loadDatabaseItems();
+            }
+          })
+          .subscribe();
+      } catch (realtimeErr) {
+        console.warn('Realtime subscription:', realtimeErr);
+      }
+
       // Проверяем существующую сессию Supabase
       const { data: { session } } = await supabaseClient.auth.getSession();
       if (session && session.user) {
@@ -595,11 +620,32 @@ function renderDatabaseItems(items) {
         <span class="item-title">${escapeHtml(item.title || item.name || 'Элемент')}</span>
         <span class="item-date">Создано: ${dateStr} &bull; Автор: ${escapeHtml(item.user_name || 'Пользователь')}</span>
       </div>
-      <span class="item-tag">ID: ${escapeHtml(String(item.id).substring(0, 8))}</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="item-tag">ID: ${escapeHtml(String(item.id).substring(0, 8))}</span>
+        <button class="btn btn-sm btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="deleteDatabaseItem('${item.id}')" title="Удалить из Supabase">✕</button>
+      </div>
     `;
     elements.dbItemsList.appendChild(li);
   });
 }
+
+// Удаление записи из Supabase БД
+async function deleteDatabaseItem(id) {
+  if (currentBackend === 'supabase' && supabaseClient) {
+    try {
+      const { error } = await supabaseClient.from('items').delete().eq('id', id);
+      if (error) throw error;
+      loadDatabaseItems();
+    } catch (err) {
+      alert('Ошибка удаления из Supabase: ' + err.message);
+    }
+  } else {
+    const items = getDemoDatabaseItems().filter(i => String(i.id) !== String(id));
+    localStorage.setItem(STORAGE_KEYS.DEMO_DB_ITEMS, JSON.stringify(items));
+    loadDatabaseItems();
+  }
+}
+window.deleteDatabaseItem = deleteDatabaseItem;
 
 // Полноценный мок локальной БД для демонстрации структуры
 function getDemoDatabaseItems() {

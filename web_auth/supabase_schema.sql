@@ -1,9 +1,9 @@
 -- ============================================================
 -- SQL-скрипт инициализации таблицы items для Supabase (PostgreSQL)
--- Вставьте этот код в SQL Editor в панели Supabase
+-- Выполните этот код в SQL Editor в консоли https://supabase.com
 -- ============================================================
 
--- 1. Создаем таблицу items для хранения списка
+-- 1. Создаем таблицу items для хранения записей
 CREATE TABLE IF NOT EXISTS public.items (
     id BIGSERIAL PRIMARY KEY,
     title TEXT NOT NULL,
@@ -15,29 +15,36 @@ CREATE TABLE IF NOT EXISTS public.items (
 -- 2. Включаем Row Level Security (RLS) для защиты данных
 ALTER TABLE public.items ENABLE ROW LEVEL SECURITY;
 
--- 3. Политика для чтения: разрешить всем авторизованным пользователям читать записи
-CREATE POLICY "Разрешить чтение авторизованным пользователям"
-ON public.items
-FOR SELECT
-TO authenticated
-USING (true);
-
--- Также разрешаем чтение анонимным пользователям (anon), если нужно показывать список до входа:
+-- 3. Политики RLS (чтение, добавление, удаление)
+-- Разрешить чтение всем (анонимным и авторизованным)
+DROP POLICY IF EXISTS "Разрешить публичное чтение" ON public.items;
 CREATE POLICY "Разрешить публичное чтение"
 ON public.items
 FOR SELECT
-TO anon
+TO anon, authenticated
 USING (true);
 
--- 4. Политика для добавления: разрешить авторизованным пользователям создавать записи
-CREATE POLICY "Разрешить добавление авторизованным пользователям"
+-- Разрешить добавление авторизованным и анонимным (в демо-целях)
+DROP POLICY IF EXISTS "Разрешить добавление записей" ON public.items;
+CREATE POLICY "Разрешить добавление записей"
 ON public.items
 FOR INSERT
-TO authenticated
+TO anon, authenticated
 WITH CHECK (true);
 
--- 5. Начальные тестовые данные для проверки отображения списка
+-- Разрешить удаление записей
+DROP POLICY IF EXISTS "Разрешить удаление записей" ON public.items;
+CREATE POLICY "Разрешить удаление записей"
+ON public.items
+FOR DELETE
+TO anon, authenticated
+USING (true);
+
+-- 4. Включаем публикацию в Supabase Realtime (для синхронизации между Web и Мобильным приложением)
+ALTER PUBLICATION supabase_realtime ADD TABLE public.items;
+
+-- 5. Начальные тестовые данные
 INSERT INTO public.items (title, user_name) VALUES
-    ('Добро пожаловать в проект Flutter + RuStore!', 'Администратор'),
-    ('Авторизация через Supabase настроена', 'Система'),
-    ('Проверка загрузки списка из базы данных PostgreSQL', 'Klixim');
+    ('База данных Supabase PostgreSQL успешно подключена', 'Supabase Admin'),
+    ('Авторизация через OAuth: GitHub, Gmail, Apple, Yandex, VK', 'Dev Team'),
+    ('Синхронизация между Web (JS) и Flutter (Mobile)', 'Klixim');

@@ -10,7 +10,7 @@ class HomeScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Добавить запись в БД'),
+        title: const Text('Добавить запись в Supabase'),
         content: TextField(
           controller: textController,
           autofocus: true,
@@ -32,7 +32,7 @@ class HomeScreen extends StatelessWidget {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Добавить'),
+            child: const Text('Добавить в БД'),
           ),
         ],
       ),
@@ -78,7 +78,7 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Обновить данные',
+            tooltip: 'Обновить данные из Supabase',
             onPressed: () => authService.fetchDatabaseItems(),
           ),
           // Кнопка выйти в шапке
@@ -138,7 +138,7 @@ class HomeScreen extends StatelessWidget {
                                     color: theme.hintColor,
                                   ),
                                 ),
-                                // Отображение имени пользователя
+                                // Имя пользователя
                                 Text(
                                   user?.name ?? 'Пользователь',
                                   style: theme.textTheme.titleMedium?.copyWith(
@@ -156,15 +156,15 @@ class HomeScreen extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary.withOpacity(0.12),
+                                    color: const Color(0xFF3ECF8E).withOpacity(0.18),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    '${user?.provider.toUpperCase()} (${user?.backend})',
-                                    style: TextStyle(
+                                    '${user?.provider.toUpperCase()} via Supabase',
+                                    style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: theme.colorScheme.primary,
+                                      color: Color(0xFF1E8E5A),
                                     ),
                                   ),
                                 ),
@@ -202,16 +202,27 @@ class HomeScreen extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Список из базы данных',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                'Список из базы данных',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF3ECF8E),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
                           ),
                           Text(
-                            authService.selectedBackend == AuthBackend.supabase
-                                ? 'Таблица items (Supabase PostgreSQL)'
-                                : 'Коллекция items (Firebase Firestore)',
+                            'Supabase PostgreSQL • таблица items',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.hintColor,
                             ),
@@ -249,12 +260,12 @@ class HomeScreen extends StatelessWidget {
                             Icon(Icons.inbox_outlined, size: 48, color: Colors.grey),
                             SizedBox(height: 12),
                             Text(
-                              'В базе данных пока нет записей',
+                              'В таблице items пока нет записей',
                               style: TextStyle(fontWeight: FontWeight.w600),
                             ),
                             SizedBox(height: 4),
                             Text(
-                              'Нажмите "Добавить", чтобы внести первую запись',
+                              'Нажмите "Добавить", чтобы внести первую запись в Supabase',
                               style: TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                           ],
@@ -263,37 +274,46 @@ class HomeScreen extends StatelessWidget {
                     )
                   else
                     ...items.map(
-                      (item) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      (item) => Dismissible(
+                        key: ValueKey(item.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.delete, color: Colors.white),
                         ),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: theme.colorScheme.primaryContainer,
-                            child: Icon(
-                              Icons.data_object,
-                              color: theme.colorScheme.primary,
-                              size: 20,
+                        onDismissed: (_) => authService.deleteItem(item.id),
+                        child: Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFF3ECF8E).withOpacity(0.2),
+                              child: const Icon(
+                                Icons.storage,
+                                color: Color(0xFF1E8E5A),
+                                size: 20,
+                              ),
                             ),
-                          ),
-                          title: Text(
-                            item.title,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          subtitle: Text(
-                            'Автор: ${item.author} • ${item.createdAt.day}.${item.createdAt.month}.${item.createdAt.year} ${item.createdAt.hour}:${item.createdAt.minute.toString().padLeft(2, '0')}',
-                            style: TextStyle(fontSize: 12, color: theme.hintColor),
-                          ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: theme.dividerColor.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
+                            title: Text(
+                              item.title,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
-                            child: Text(
-                              '#${item.id.length > 5 ? item.id.substring(0, 5) : item.id}',
-                              style: const TextStyle(fontSize: 11),
+                            subtitle: Text(
+                              'Автор: ${item.author} • ${item.createdAt.day}.${item.createdAt.month}.${item.createdAt.year} ${item.createdAt.hour}:${item.createdAt.minute.toString().padLeft(2, '0')}',
+                              style: TextStyle(fontSize: 12, color: theme.hintColor),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              color: Colors.grey,
+                              tooltip: 'Удалить из Supabase',
+                              onPressed: () => authService.deleteItem(item.id),
                             ),
                           ),
                         ),
