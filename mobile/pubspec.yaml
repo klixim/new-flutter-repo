@@ -1,0 +1,21 @@
+name: students_lab
+description: Учебное приложение Студенты
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ^3.8.0
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: 2.18.3
+  firebase_core: ^4.0.0
+  firebase_auth: ^6.0.0
+  firebase_database: ^12.0.0
+  google_sign_in: ^7.2.0
+  flutter_web_auth_2: ^5.0.0
+  crypto: ^3.0.6
+  http: ^1.4.0
+flutter:
+  uses-material-design: true
+dev_dependencies:
+  flutter_lints: ^6.0.0

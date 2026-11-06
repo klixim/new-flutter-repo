@@ -1,0 +1,8 @@
+{
+  "name": "students-oauth",
+  "private": true,
+  "type": "module",
+  "scripts": {"start": "node --env-file-if-exists=.env server.mjs"},
+  "engines": {"node": ">=22"},
+  "dependencies": {"firebase-admin": "^13.0.0"}
+}

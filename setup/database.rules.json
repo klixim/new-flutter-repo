@@ -1,0 +1,17 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "lab_students": {
+      ".read": "auth != null",
+      "$student": {
+        ".write": "auth != null && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['name', 'major', 'gradYear'])",
+        "name": { ".validate": "newData.isString() && newData.val().matches(/.*\\S.*/) && newData.val().length <= 100" },
+        "major": { ".validate": "newData.isString() && newData.val().matches(/.*\\S.*/) && newData.val().length <= 120" },
+        "gradYear": { ".validate": "newData.isNumber() && newData.val() % 1 == 0 && newData.val() >= 1900 && newData.val() <= 2200" },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}
