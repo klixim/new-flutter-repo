@@ -67,13 +67,13 @@ li { margin-bottom:8px; overflow-wrap:anywhere }
 // Замените значения на параметры вашего Web App из Firebase Console при подключении своего проекта.
 const config = {
   firebase: {
-    apiKey: 'AIzaSyA4983eqcZ8MrZQ9lRF4MWVFnVPUiHtFLQ',
-    authDomain: 'studyflutter-6a402.firebaseapp.com',
-    projectId: 'studyflutter-6a402',
-    storageBucket: 'studyflutter-6a402.firebasestorage.app',
-    messagingSenderId: '188817309892',
-    appId: '1:188817309892:web:b7044f3e8bdd028891c991',
-    databaseURL: 'https://studyflutter-6a402-default-rtdb.europe-west1.firebasedatabase.app',
+    apiKey: "AIzaSyB8RLls5USRKP4wvOuVI8NHUh-QbbNl97s",
+    authDomain: "students-reg-90638.firebaseapp.com",
+    projectId: "students-reg-90638",
+    storageBucket: "students-reg-90638.firebasestorage.app",
+    messagingSenderId: "1014384826693",
+    appId: "1:1014384826693:web:8abb34d641d5347b32062c",
+    databaseURL: "https://students-reg-90638-default-rtdb.europe-west1.firebasedatabase.app",
   },
   oauthServer: '',
 };
@@ -87,6 +87,7 @@ const methods = {
 
 const query = new URLSearchParams(location.search);
 mode.value = Object.hasOwn(methods, query.get('mode')) ? query.get('mode') : 'firebase-manual';
+if (query.get('databaseURL')) config.firebase.databaseURL = query.get('databaseURL');
 
 const providers = {
   github: 'GitHub',

@@ -13,7 +13,7 @@ import 'package:http/http.dart' as http;
 
 const databaseUrl = String.fromEnvironment(
   'FIREBASE_DATABASE_URL',
-  defaultValue: 'https://studyflutter-6a402-default-rtdb.europe-west1.firebasedatabase.app',
+  defaultValue: 'https://students-reg-90638-default-rtdb.europe-west1.firebasedatabase.app',
 );
 const oauthUrl = String.fromEnvironment('OAUTH_URL');
 const googleClient = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
