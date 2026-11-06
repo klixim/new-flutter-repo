@@ -5,3 +5,6 @@ node_modules/
 build/
 google-services.json
 GoogleService-Info.plist
+
+students_app_v2/
+students_app_v2.rar

@@ -3,7 +3,6 @@ import socketserver
 import os
 import sys
 
-PORT = int(os.environ.get("PORT", 8080))
 DOCS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs")
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
@@ -14,11 +13,30 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         super().end_headers()
 
-if __name__ == '__main__':
-    with socketserver.TCPServer(("127.0.0.1", PORT), CustomHandler) as httpd:
-        print(f"Локальный предпросмотр запущен: http://127.0.0.1:{PORT}/")
-        print("Нажмите Ctrl+C для остановки сервера.")
+def run_server():
+    ports_to_try = [int(os.environ.get("PORT", 8085)), 8080, 8088, 3000]
+    httpd = None
+    selected_port = None
+
+    for port in ports_to_try:
+        try:
+            httpd = socketserver.TCPServer(("127.0.0.1", port), CustomHandler)
+            selected_port = port
+            break
+        except OSError:
+            continue
+
+    if not httpd:
+        print("Не удалось занять свободный порт.")
+        sys.exit(1)
+
+    with httpd:
+        print(f"Локальный предпросмотр запущен: http://127.0.0.1:{selected_port}/")
+        print("Нажмите Ctrl+C для завершения.")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             print("\nСервер остановлен.")
+
+if __name__ == '__main__':
+    run_server()

@@ -12,8 +12,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
-const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-const supabaseKey = String.fromEnvironment('SUPABASE_KEY');
+const supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://eyywkkxnzzwpjmgnsnqq.supabase.co');
+const supabaseKey = String.fromEnvironment('SUPABASE_KEY', defaultValue: 'sb_publishable_FvDLO-hrPG_I2hznWMp8Tg_ixmUPw9m');
 const databaseUrl = String.fromEnvironment('FIREBASE_DATABASE_URL');
 const oauthUrl = String.fromEnvironment('OAUTH_URL');
 const googleClient = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
