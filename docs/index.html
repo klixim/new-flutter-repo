@@ -41,10 +41,7 @@ li { margin-bottom:8px; overflow-wrap:anywhere }
 <div id="login" class="row">
 <button data-provider="github">GitHub</button>
 <button data-provider="google">Google / Gmail</button>
-<button data-provider="apple">Apple</button>
 <button data-provider="anonymous">Анонимный вход (гость)</button>
-<button data-provider="yandex">Яндекс ID</button>
-<button data-provider="vk">VK ID</button>
 </div>
 <div id="account" class="row" hidden><strong id="username"></strong><button id="link-github" hidden>Привязать GitHub</button><button id="logout">Выйти</button></div>
 <p id="status" role="status"></p>
@@ -75,7 +72,6 @@ const config = {
     appId: "1:1014384826693:web:8abb34d641d5347b32062c",
     databaseURL: "https://students-reg-90638-default-rtdb.europe-west1.firebasedatabase.app",
   },
-  oauthServer: '',
 };
 
 const $ = id => document.getElementById(id);
@@ -92,10 +88,7 @@ if (query.get('databaseURL')) config.firebase.databaseURL = query.get('databaseU
 const providers = {
   github: 'GitHub',
   google: 'Google',
-  apple: 'Apple',
   anonymous: 'Анонимный вход (гость)',
-  yandex: 'Яндекс ID',
-  vk: 'VK ID',
 };
 
 let adapter, user, stopAuth, stopData, version = 0, view = 0, readNumber = 0;
@@ -152,7 +145,6 @@ async function makeFirebase() {
       const options = {
         github: () => new auth.GithubAuthProvider(),
         google: () => new auth.GoogleAuthProvider(),
-        apple: () => new auth.OAuthProvider('apple.com'),
       };
       const factory = options[provider];
       if (!factory) throw new Error('Неизвестный провайдер: ' + provider);
@@ -242,49 +234,13 @@ async function connect() {
   }
 }
 
-async function externalLogin(provider) {
-  if (!config.oauthServer) throw new Error('Укажите адрес OAuth-сервера в config.oauthServer.');
-  const verifier = crypto.randomUUID() + crypto.randomUUID();
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
-  sessionStorage.setItem('oauth-verifier', verifier);
-  const url = new URL('/login/' + provider, config.oauthServer);
-  url.searchParams.set('challenge', challenge);
-  location.assign(url);
-}
-
-async function finishExternal() {
-  const code = query.get('ticket');
-  if (query.has('oauth_error')) {
-    history.replaceState(null, '', returnUrl());
-    sessionStorage.removeItem('oauth-verifier');
-    throw new Error('Провайдер отклонил вход или вход был отменён.');
-  }
-  if (!code) return;
-  history.replaceState(null, '', returnUrl());
-  const verifier = sessionStorage.getItem('oauth-verifier');
-  sessionStorage.removeItem('oauth-verifier');
-  if (!verifier || !adapter?.custom) throw new Error('Начните вход заново с этой вкладки.');
-  const response = await fetch(new URL('/exchange', config.oauthServer), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticket: code, verifier }),
-  });
-  if (!response.ok) throw new Error('Не удалось завершить вход. Попробуйте ещё раз.');
-  await adapter.custom((await response.json()).token);
-}
-
 $('login').onclick = async event => {
   const provider = event.target.dataset.provider;
   if (!provider) return;
   try {
-    if (['yandex', 'vk'].includes(provider)) {
-      await externalLogin(provider);
-    } else {
-      if (!adapter) throw new Error('Сначала настройте подключение к Firebase.');
-      await adapter.login(provider);
-      $('status').textContent = 'Подключено к Firebase (Реальная БД)';
-    }
+    if (!adapter) throw new Error('Сначала настройте подключение к Firebase.');
+    await adapter.login(provider);
+    $('status').textContent = 'Подключено к Firebase (Реальная БД)';
   } catch (error) {
     if (provider === 'github' && error.code === 'auth/account-exists-with-different-credential') {
       $('status').textContent = 'Этот email уже зарегистрирован в Firebase. Войдите прежним способом (например Google) и нажмите «Привязать GitHub».';
@@ -348,7 +304,6 @@ form.onsubmit = async event => {
 
 mode.onchange = () => void connect();
 await connect();
-try { await finishExternal(); } catch (error) { $('status').textContent = error.message; }
 </script>
 </body>
 </html>

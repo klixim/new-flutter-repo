@@ -156,17 +156,7 @@ node preview.cjs
 
 ---
 
-## 3. Яндекс ID и VK ID (Опционально)
-
-Для входа через российские сервисы Яндекс ID и VK ID в Firebase используется обмен кодов на Custom Tokens через вспомогательный сервер `oauth/server.mjs`.
-
-1. Создайте приложения в [Яндекс OAuth](https://oauth.yandex.ru/client/new) и [VK ID](https://id.vk.ru/about/business).
-2. Разверните сервис из папки `oauth/` на любом Node.js хостинге с HTTPS (например, Railway, Render).
-3. Укажите публичный адрес сервера в `config.oauthServer` внутри `docs/index.html`.
-
----
-
-## 4. Мобильное приложение (Flutter)
+## 3. Мобильное приложение (Flutter)
 
 Код мобильного приложения находится в каталоге `mobile/`.
 
@@ -177,13 +167,13 @@ node preview.cjs
    ```
 2. Для сборки с вашей базой данных передайте URL базы через `--dart-define`:
    ```powershell
-   flutter run --dart-define=FIREBASE_DATABASE_URL=https://ВАШ_PROJECT_ID-default-rtdb.europe-west1.firebasedatabase.app
+   flutter run --dart-define=FIREBASE_DATABASE_URL=https://students-reg-90638-default-rtdb.europe-west1.firebasedatabase.app
    ```
 3. Для полной интеграции с Firebase на Android добавьте файл `google-services.json` (скачивается в Project settings -> Your apps -> Android) в папку `mobile/android/app/`.
 
 ---
 
-## 5. Как устроен Firebase Realtime
+## 4. Как устроен Firebase Realtime
 - **Чтение списка:** `get(latest)` выполняет однократный HTTP-запрос к Realtime Database REST API / протоколу и возвращает последние 100 записей.
 - **Добавление записи:** `push(students, row)` генерирует уникальный лексикографический ключ на стороне сервера и сохраняет запись студента.
 - **Realtime-подписка:** `onValue(latest, callback)` устанавливает постоянное двустороннее WebSocket-соединение с Firebase. При любом изменении ветки `lab_students` сервер автоматически отправляет актуальный срез данных подписчикам без необходимости повторных запросов со стороны клиента.

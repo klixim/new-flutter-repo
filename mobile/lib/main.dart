@@ -1,21 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 
-import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:http/http.dart' as http;
 
 const databaseUrl = String.fromEnvironment(
   'FIREBASE_DATABASE_URL',
   defaultValue: 'https://students-reg-90638-default-rtdb.europe-west1.firebasedatabase.app',
 );
-const oauthUrl = String.fromEnvironment('OAUTH_URL');
 const googleClient = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
 Future<void> main() async {
@@ -26,33 +20,6 @@ Future<void> main() async {
     } catch (_) {}
   }
   runApp(const MaterialApp(home: StudentsPage(), debugShowCheckedModeBanner: false));
-}
-
-Future<void> loginExternal(String provider) async {
-  final server = Uri.tryParse(oauthUrl);
-  if (server == null || server.scheme != 'https' || !server.hasAuthority) {
-    throw StateError('Укажите HTTPS-адрес OAUTH_URL.');
-  }
-  final random = Random.secure();
-  String encode(List<int> bytes) => base64UrlEncode(bytes).replaceAll('=', '');
-  final verifier = encode(List.generate(32, (_) => random.nextInt(256)));
-  final start = server.resolve('/login/$provider').replace(queryParameters: {
-    'mobile': '1', 'challenge': encode(sha256.convert(utf8.encode(verifier)).bytes),
-  });
-  final result = Uri.parse(await FlutterWebAuth2.authenticate(
-    url: start.toString(), callbackUrlScheme: 'studentsoauth',
-  ));
-  final ticket = result.queryParameters['ticket'];
-  if (result.host != 'callback' || ticket == null) {
-    throw StateError('Провайдер отклонил вход или вход был отменён.');
-  }
-  final response = await http.post(server.resolve('/exchange'),
-    headers: {'Content-Type': 'application/json'},
-    body: jsonEncode({'ticket': ticket, 'verifier': verifier}),
-  ).timeout(const Duration(seconds: 15));
-  if (response.statusCode != 200) throw StateError('Код входа не принят.');
-  final token = (jsonDecode(response.body) as Map)['token'] as String;
-  await fb.FirebaseAuth.instance.signInWithCustomToken(token);
 }
 
 class StudentsPage extends StatefulWidget {
@@ -69,9 +36,6 @@ class _StudentsPageState extends State<StudentsPage> {
   static const providers = {
     'github': 'GitHub',
     'google': 'Google / Gmail',
-    'apple': 'Apple',
-    'yandex': 'Яндекс ID',
-    'vk': 'VK ID',
   };
   final form = GlobalKey<FormState>();
   final name = TextEditingController();
@@ -169,9 +133,7 @@ class _StudentsPageState extends State<StudentsPage> {
   }
 
   Future<void> login(String provider) async {
-    if (provider == 'yandex' || provider == 'vk') {
-      await loginExternal(provider);
-    } else if (provider == 'google') {
+    if (provider == 'google') {
       await (googleInit ??= GoogleSignIn.instance.initialize(
         serverClientId: googleClient.isEmpty ? null : googleClient,
       ));
@@ -180,9 +142,7 @@ class _StudentsPageState extends State<StudentsPage> {
         idToken: user.authentication.idToken,
       ));
     } else {
-      await auth.signInWithProvider(
-        provider == 'github' ? fb.GithubAuthProvider() : fb.AppleAuthProvider(),
-      );
+      await auth.signInWithProvider(fb.GithubAuthProvider());
     }
   }
 
