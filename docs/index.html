@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Студенты · Supabase и Firebase</title>
+<title>Студенты · Firebase</title>
 <style>
 * { box-sizing:border-box }
 body { margin:0; background:#f1f5f3; color:#17312a; font:16px/1.5 system-ui,sans-serif }
@@ -26,17 +26,14 @@ li { margin-bottom:8px; overflow-wrap:anywhere }
 <body><main>
 <small>ПРАКТИКА ПО МОБИЛЬНОЙ РАЗРАБОТКЕ</small>
 <h1>Студенты</h1>
-<p>Добавьте студента и сравните ручное обновление со списком, который меняется сам.</p>
+<p>Добавьте студента и сравните ручное обновление со списком, который синхронизируется в реальном времени через Firebase Realtime Database.</p>
 <section>
 <label>Вариант работы с базой
 <select id="mode">
-<option value="supabase-manual">1. Supabase · без Realtime</option>
-<option value="supabase-live">2. Supabase · с Realtime</option>
-<option value="firebase-manual">3. Firebase · без Realtime</option>
-<option value="firebase-live">4. Firebase · с Realtime</option>
+<option value="firebase-manual">1. Firebase · без Realtime (ручное обновление)</option>
+<option value="firebase-live">2. Firebase · с Realtime (мгновенная синхронизация)</option>
 </select></label>
 <p id="method"></p>
-<label class="row"><input id="demo" type="checkbox" checked> Локальная демонстрация</label>
 <p>Для проверки Realtime откройте две вкладки с одной базой. Добавьте запись в одной и сравните списки.</p>
 </section>
 <section>
@@ -45,6 +42,7 @@ li { margin-bottom:8px; overflow-wrap:anywhere }
 <button data-provider="github">GitHub</button>
 <button data-provider="google">Google / Gmail</button>
 <button data-provider="apple">Apple</button>
+<button data-provider="anonymous">Анонимный вход (гость)</button>
 <button data-provider="yandex">Яндекс ID</button>
 <button data-provider="vk">VK ID</button>
 </div>
@@ -65,10 +63,9 @@ li { margin-bottom:8px; overflow-wrap:anywhere }
 </section>
 </main>
 <script type="module">
-// Только публичная конфигурация собственного проекта.
+// Публичная конфигурация проекта Firebase.
+// Замените значения на параметры вашего Web App из Firebase Console при подключении своего проекта.
 const config = {
-  supabaseUrl: 'https://eyywkkxnzzwpjmgnsnqq.supabase.co',
-  supabaseKey: 'sb_publishable_FvDLO-hrPG_I2hznWMp8Tg_ixmUPw9m',
   firebase: {
     apiKey: 'AIzaSyA4983eqcZ8MrZQ9lRF4MWVFnVPUiHtFLQ',
     authDomain: 'studyflutter-6a402.firebaseapp.com',
@@ -80,132 +77,97 @@ const config = {
   },
   oauthServer: '',
 };
+
 const $ = id => document.getElementById(id);
-const mode = $('mode'), demo = $('demo'), form = $('student-form');
+const mode = $('mode'), form = $('student-form');
 const methods = {
-  'supabase-manual': 'select() и insert()',
-  'supabase-live': 'select() и insert() + подписка postgres_changes',
-  'firebase-manual': 'get() и push()',
-  'firebase-live': 'push() + подписка onValue()',
+  'firebase-manual': 'get() и push() — ручное чтение и добавление',
+  'firebase-live': 'push() + подписка onValue() — мгновенное обновление списка',
 };
+
 const query = new URLSearchParams(location.search);
-mode.value = Object.hasOwn(methods, query.get('mode')) ? query.get('mode') : 'supabase-manual';
-demo.checked = query.get('cloud') !== '1';
-const providers = {github:'GitHub', google:'Google', apple:'Apple', yandex:'Яндекс ID', vk:'VK ID'};
+mode.value = Object.hasOwn(methods, query.get('mode')) ? query.get('mode') : 'firebase-manual';
+
+const providers = {
+  github: 'GitHub',
+  google: 'Google',
+  apple: 'Apple',
+  anonymous: 'Анонимный вход (гость)',
+  yandex: 'Яндекс ID',
+  vk: 'VK ID',
+};
+
 let adapter, user, stopAuth, stopData, version = 0, view = 0, readNumber = 0;
-const cloud = new Map();
-
-function localAdapter(service) {
-  const key = 'students-lab:' + service + ':';
-  const rows = () => Object.keys(localStorage).filter(k => k.startsWith(key))
-    .map(k => JSON.parse(localStorage.getItem(k))).sort((a,b) => b.created - a.created);
-  let listener = () => {};
-  return {
-    observe(fn) { listener = fn; fn(sessionStorage.getItem(key)); return () => {}; },
-    login(provider) { const name = 'Учебный профиль · ' + providers[provider]; sessionStorage.setItem(key,name); listener(name); },
-    logout() { sessionStorage.removeItem(key); listener(null); },
-    read: rows,
-    add(row) { localStorage.setItem(key + crypto.randomUUID(), JSON.stringify({...row,created:Date.now()})); },
-    live(update) {
-      const receive = e => { if (!e.key || e.key.startsWith(key)) update(rows()); };
-      addEventListener('storage',receive);
-      update(rows());
-      return () => removeEventListener('storage',receive);
-    },
-  };
-}
-
-async function makeSupabase() {
-  if (!config.supabaseUrl || !config.supabaseKey) throw new Error('Укажите URL и публичный ключ Supabase в config.');
-  const {createClient} = await import('https://esm.sh/@supabase/supabase-js@2');
-  const client = createClient(config.supabaseUrl, config.supabaseKey, {
-    auth:{flowType:'pkce',detectSessionInUrl:true},
-  });
-  const {error} = await client.auth.initialize();
-  const table = () => client.from('lab_students');
-  return {
-    authError: error,
-    observe(fn) {
-      const {data} = client.auth.onAuthStateChange((_event,session) => {
-        const u = session?.user;
-        const meta = u?.user_metadata;
-        fn(u ? {id:u.id, name:meta.full_name || meta.name || meta.user_name || u.email || 'Пользователь'} : null);
-      });
-      return () => data.subscription.unsubscribe();
-    },
-    async login(provider) {
-      const {error} = await client.auth.signInWithOAuth({provider,options:{redirectTo:returnUrl()}});
-      if (error) throw error;
-    },
-    async logout() { const {error} = await client.auth.signOut({scope:'local'}); if (error) throw error; },
-    async read() {
-      const {data,error} = await table().select('name,major,gradYear').order('id',{ascending:false}).limit(100);
-      if (error) throw error;
-      return data;
-    },
-    async add(row) { const {error} = await table().insert(row); if (error) throw error; },
-    live(_update,reject,refresh) {
-      const channel = client.channel('lab-students-' + crypto.randomUUID())
-        .on('postgres_changes',{event:'*',schema:'public',table:'lab_students'},refresh)
-        .subscribe((state,error) => {
-          if (state === 'SUBSCRIBED') refresh();
-          if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') reject(error || new Error(state));
-        });
-      return () => { void client.removeChannel(channel); };
-    },
-  };
-}
+let firebasePromise = null;
 
 async function makeFirebase() {
-  if (!config.firebase.apiKey) throw new Error('Вставьте firebaseConfig своего Web App.');
-  if (!config.firebase.databaseURL) throw new Error('Firebase Web App подключён. Укажите databaseURL из Realtime Database.');
+  if (!config.firebase || !config.firebase.apiKey) {
+    throw new Error('Вставьте firebaseConfig своего Web App в config.firebase.');
+  }
+  if (!config.firebase.databaseURL) {
+    throw new Error('Firebase Web App подключён. Укажите databaseURL из Realtime Database в config.firebase.');
+  }
+
   const base = 'https://www.gstatic.com/firebasejs/13.1.0/firebase-';
-  const [app,auth,db] = await Promise.all(['app','auth','database'].map(name => import(base + name + '.js')));
+  const [app, auth, db] = await Promise.all(['app', 'auth', 'database'].map(name => import(base + name + '.js')));
   const firebase = app.initializeApp(config.firebase);
   const session = auth.getAuth(firebase);
   session.languageCode = 'ru';
-  const students = db.ref(db.getDatabase(firebase),'lab_students');
-  const latest = db.query(students,db.limitToLast(100));
+  const students = db.ref(db.getDatabase(firebase), 'lab_students');
+  const latest = db.query(students, db.limitToLast(100));
+
   const rows = snapshot => {
     const list = [];
     snapshot.forEach(child => { list.push(child.val()); });
     return list.reverse();
   };
-  const profile = u => u ? {
-    id: u.uid,
-    name: u.displayName || u.providerData.find(p => p.displayName)?.displayName || u.email || 'Пользователь',
-    githubLinked: u.providerData.some(p => p.providerId === 'github.com'),
-  } : null;
+
+  const profile = u => {
+    if (!u) return null;
+    let name = u.displayName || u.providerData?.find(p => p.displayName)?.displayName || u.email;
+    if (!name && u.isAnonymous) name = 'Гость (' + u.uid.slice(0, 6) + ')';
+    return {
+      id: u.uid,
+      name: name || 'Пользователь',
+      githubLinked: u.providerData?.some(p => p.providerId === 'github.com') ?? false,
+    };
+  };
+
   return {
-    observe(fn,reject) {
-      return auth.onIdTokenChanged(session,u => fn(profile(u)),reject);
+    observe(fn, reject) {
+      return auth.onIdTokenChanged(session, u => fn(profile(u)), reject);
     },
     async linkGithub() {
       const current = session.currentUser;
       if (!current) throw new Error('Сначала войдите в Firebase.');
-      const {user} = await auth.linkWithPopup(current,new auth.GithubAuthProvider());
+      const { user } = await auth.linkWithPopup(current, new auth.GithubAuthProvider());
       return profile(user);
     },
     async login(provider) {
+      if (provider === 'anonymous') {
+        await auth.signInAnonymously(session);
+        return;
+      }
       const options = {
         github: () => new auth.GithubAuthProvider(),
         google: () => new auth.GoogleAuthProvider(),
         apple: () => new auth.OAuthProvider('apple.com'),
       };
-      await auth.signInWithPopup(session,options[provider]());
+      const factory = options[provider];
+      if (!factory) throw new Error('Неизвестный провайдер: ' + provider);
+      await auth.signInWithPopup(session, factory());
     },
-    custom: token => auth.signInWithCustomToken(session,token),
+    custom: token => auth.signInWithCustomToken(session, token),
     logout: () => auth.signOut(session),
     read: async () => rows(await db.get(latest)),
-    add: row => db.push(students,row),
-    live: (update,reject) => db.onValue(latest,snapshot => update(rows(snapshot)),reject),
+    add: row => db.push(students, row),
+    live: (update, reject) => db.onValue(latest, snapshot => update(rows(snapshot)), reject),
   };
 }
 
 function returnUrl() {
-  const url = new URL(location.pathname,location.href);
-  url.searchParams.set('cloud','1');
-  url.searchParams.set('mode',mode.value);
+  const url = new URL(location.pathname, location.href);
+  url.searchParams.set('mode', mode.value);
   return url.href;
 }
 
@@ -242,7 +204,7 @@ function showUser(next) {
   $('login').hidden = !!user;
   $('account').hidden = $('students').hidden = !user;
   $('student-list').replaceChildren();
-  $('username').textContent = user?.name || user || '';
+  $('username').textContent = user?.name || '';
   if (!user) return;
   $('data-status').textContent = 'Загрузка…';
   if (mode.value.endsWith('-live')) {
@@ -259,58 +221,53 @@ async function connect() {
   stopAuth?.();
   showUser(null);
   adapter = undefined;
-  const service = mode.value.split('-')[0];
-  $('method').textContent = methods[mode.value];
-  $('status').textContent = 'Подключение…';
+  $('method').textContent = methods[mode.value] || '';
+  $('status').textContent = 'Подключение к Firebase…';
   try {
-    if (!demo.checked && !cloud.has(service)) {
-      const pending = service === 'supabase' ? makeSupabase() : makeFirebase();
-      cloud.set(service,pending);
-      pending.catch(() => cloud.delete(service));
+    if (!firebasePromise) {
+      firebasePromise = makeFirebase();
+      firebasePromise.catch(() => { firebasePromise = null; });
     }
-    const instance = demo.checked ? localAdapter(service) : await cloud.get(service);
+    const instance = await firebasePromise;
     if (current !== version) return;
     adapter = instance;
-    const status = $('status');
-    status.textContent = demo.checked ? 'Учебные данные этого браузера. Кнопки имитируют вход.' : 'Облачный режим';
-    if (!demo.checked && service === 'supabase') {
-      const fragment = new URLSearchParams(location.hash.slice(1));
-      const detail = query.get('error_description') || fragment.get('error_description')
-        || query.get('error_code') || fragment.get('error_code') || adapter.authError?.message;
-      if (detail) status.textContent = 'Вход через Supabase не завершён. ' + detail;
-    }
-    stopAuth = adapter.observe(next => { if (current === version) showUser(next); },
-      error => { if (current === version) $('status').textContent = error.message; });
+    $('status').textContent = 'Подключено к Firebase (Реальная БД)';
+    stopAuth = adapter.observe(
+      next => { if (current === version) showUser(next); },
+      error => { if (current === version) $('status').textContent = error.message; }
+    );
   } catch (error) {
     if (current === version) $('status').textContent = error.message;
   }
 }
 
 async function externalLogin(provider) {
-  if (!config.oauthServer) throw new Error('Укажите адрес OAuth-сервера в config.');
+  if (!config.oauthServer) throw new Error('Укажите адрес OAuth-сервера в config.oauthServer.');
   const verifier = crypto.randomUUID() + crypto.randomUUID();
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
   const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
-  sessionStorage.setItem('oauth-verifier',verifier);
-  const url = new URL('/login/' + provider,config.oauthServer);
-  url.searchParams.set('challenge',challenge);
+  sessionStorage.setItem('oauth-verifier', verifier);
+  const url = new URL('/login/' + provider, config.oauthServer);
+  url.searchParams.set('challenge', challenge);
   location.assign(url);
 }
 
 async function finishExternal() {
   const code = query.get('ticket');
   if (query.has('oauth_error')) {
-    history.replaceState(null,'',returnUrl());
+    history.replaceState(null, '', returnUrl());
     sessionStorage.removeItem('oauth-verifier');
     throw new Error('Провайдер отклонил вход или вход был отменён.');
   }
   if (!code) return;
-  history.replaceState(null,'',returnUrl());
+  history.replaceState(null, '', returnUrl());
   const verifier = sessionStorage.getItem('oauth-verifier');
   sessionStorage.removeItem('oauth-verifier');
-  if (!verifier || !adapter?.custom) throw new Error('Начните вход заново с этой вкладки в режиме Firebase.');
-  const response = await fetch(new URL('/exchange',config.oauthServer),{
-    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket:code,verifier}),
+  if (!verifier || !adapter?.custom) throw new Error('Начните вход заново с этой вкладки.');
+  const response = await fetch(new URL('/exchange', config.oauthServer), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticket: code, verifier }),
   });
   if (!response.ok) throw new Error('Не удалось завершить вход. Попробуйте ещё раз.');
   await adapter.custom((await response.json()).token);
@@ -320,18 +277,23 @@ $('login').onclick = async event => {
   const provider = event.target.dataset.provider;
   if (!provider) return;
   try {
-    if (!demo.checked && ['yandex','vk'].includes(provider)) {
-      if (!mode.value.startsWith('firebase') || !adapter) throw new Error('Для Яндекс ID и VK ID выберите настроенный режим Firebase.');
+    if (['yandex', 'vk'].includes(provider)) {
       await externalLogin(provider);
     } else {
-      if (!adapter) throw new Error('Сначала настройте подключение к базе.');
+      if (!adapter) throw new Error('Сначала настройте подключение к Firebase.');
       await adapter.login(provider);
-      if (adapter?.linkGithub) $('status').textContent = 'Облачный режим';
+      $('status').textContent = 'Подключено к Firebase (Реальная БД)';
     }
   } catch (error) {
-    $('status').textContent = provider === 'github' && error.code === 'auth/account-exists-with-different-credential'
-      ? 'Этот email уже зарегистрирован в Firebase. Войдите прежним способом, например через Google, и нажмите «Привязать GitHub».'
-      : error.message;
+    if (provider === 'github' && error.code === 'auth/account-exists-with-different-credential') {
+      $('status').textContent = 'Этот email уже зарегистрирован в Firebase. Войдите прежним способом (например Google) и нажмите «Привязать GitHub».';
+    } else if (error.code === 'auth/unauthorized-domain') {
+      $('status').textContent = 'Домен не авторизован в Firebase. В Firebase Console откройте Authentication -> Settings -> Authorized domains и добавьте ' + location.hostname;
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      $('status').textContent = 'Окно входа было закрыто до завершения.';
+    } else {
+      $('status').textContent = error.message;
+    }
   }
 };
 
@@ -354,25 +316,36 @@ $('link-github').onclick = async () => {
 $('logout').onclick = async () => {
   try { await adapter.logout(); } catch (error) { $('status').textContent = error.message; }
 };
+
 $('refresh').onclick = read;
+
 form.onsubmit = async event => {
   event.preventDefault();
   const values = new FormData(form);
-  const row = {name:values.get('name').trim(),major:values.get('major').trim(),gradYear:Number(values.get('gradYear'))};
-  if (!row.name || !row.major) { $('data-status').textContent = 'Заполните имя и специальность.'; return; }
+  const row = {
+    name: values.get('name').trim(),
+    major: values.get('major').trim(),
+    gradYear: Number(values.get('gradYear')),
+  };
+  if (!row.name || !row.major) {
+    $('data-status').textContent = 'Заполните имя и специальность.';
+    return;
+  }
   const current = view, button = form.querySelector('button');
   button.disabled = true;
   try {
     await adapter.add(row);
     if (current !== view) return;
     form.reset();
-    // В локальном режиме событие storage приходит только в другие вкладки.
-    if (demo.checked || mode.value.endsWith('-manual')) await read();
+    if (mode.value.endsWith('-manual')) await read();
   } catch (error) {
     if (current === view) $('data-status').textContent = error.message;
-  } finally { button.disabled = false; }
+  } finally {
+    button.disabled = false;
+  }
 };
-mode.onchange = demo.onchange = () => void connect();
+
+mode.onchange = () => void connect();
 await connect();
 try { await finishExternal(); } catch (error) { $('status').textContent = error.message; }
 </script>

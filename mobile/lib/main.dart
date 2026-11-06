@@ -10,20 +10,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
-const supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://eyywkkxnzzwpjmgnsnqq.supabase.co');
-const supabaseKey = String.fromEnvironment('SUPABASE_KEY', defaultValue: 'sb_publishable_FvDLO-hrPG_I2hznWMp8Tg_ixmUPw9m');
-const databaseUrl = String.fromEnvironment('FIREBASE_DATABASE_URL');
+const databaseUrl = String.fromEnvironment(
+  'FIREBASE_DATABASE_URL',
+  defaultValue: 'https://studyflutter-6a402-default-rtdb.europe-west1.firebasedatabase.app',
+);
 const oauthUrl = String.fromEnvironment('OAUTH_URL');
 const googleClient = String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty) {
-    await sb.Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
+  if (databaseUrl.isNotEmpty) {
+    try {
+      await Firebase.initializeApp();
+    } catch (_) {}
   }
-  if (databaseUrl.isNotEmpty) await Firebase.initializeApp();
   runApp(const MaterialApp(home: StudentsPage(), debugShowCheckedModeBanner: false));
 }
 
@@ -62,12 +63,15 @@ class StudentsPage extends StatefulWidget {
 
 class _StudentsPageState extends State<StudentsPage> {
   static const modes = [
-    'Supabase · без Realtime', 'Supabase · с Realtime',
-    'Firebase · без Realtime', 'Firebase · с Realtime',
+    'Firebase · без Realtime',
+    'Firebase · с Realtime',
   ];
   static const providers = {
-    'github': 'GitHub', 'google': 'Google / Gmail', 'apple': 'Apple',
-    'yandex': 'Яндекс ID', 'vk': 'VK ID',
+    'github': 'GitHub',
+    'google': 'Google / Gmail',
+    'apple': 'Apple',
+    'yandex': 'Яндекс ID',
+    'vk': 'VK ID',
   };
   final form = GlobalKey<FormState>();
   final name = TextEditingController();
@@ -78,14 +82,10 @@ class _StudentsPageState extends State<StudentsPage> {
   String? account, uid, message;
   List<Map<String, dynamic>> rows = [];
   StreamSubscription<dynamic>? authChanges, dataChanges;
-  sb.RealtimeChannel? channel;
   Future<void>? googleInit;
 
-  bool get firebase => mode >= 2;
-  bool get live => mode.isOdd;
-  bool get configured => firebase
-      ? databaseUrl.isNotEmpty : supabaseUrl.isNotEmpty && supabaseKey.isNotEmpty;
-  sb.SupabaseClient get supabase => sb.Supabase.instance.client;
+  bool get live => mode == 1;
+  bool get configured => databaseUrl.isNotEmpty;
   fb.FirebaseAuth get auth => fb.FirebaseAuth.instance;
   DatabaseReference get students =>
       FirebaseDatabase.instanceFor(app: Firebase.app(), databaseURL: databaseUrl).ref('lab_students');
@@ -100,33 +100,17 @@ class _StudentsPageState extends State<StudentsPage> {
   void stopData() {
     unawaited(dataChanges?.cancel());
     dataChanges = null;
-    final previous = channel;
-    channel = null;
-    if (previous != null) unawaited(supabase.removeChannel(previous).then<void>((_) {}));
   }
 
   void observe() {
     unawaited(authChanges?.cancel());
     final selected = mode;
     if (!configured) return;
-    if (firebase) {
-      authChanges = auth.authStateChanges().listen((user) {
-        if (mounted && mode == selected) {
-          showAccount(user?.uid, user?.displayName ?? user?.email ?? 'Пользователь');
-        }
-      }, onError: showError);
-    } else {
-      void update(sb.User? user) {
-        final meta = user?.userMetadata;
-        final label = meta?['full_name'] ?? meta?['name'] ?? meta?['user_name'] ??
-            user?.email ?? 'Пользователь';
-        if (mounted && mode == selected) showAccount(user?.id, label.toString());
+    authChanges = auth.authStateChanges().listen((user) {
+      if (mounted && mode == selected) {
+        showAccount(user?.uid, user?.displayName ?? user?.email ?? 'Пользователь');
       }
-      authChanges = supabase.auth.onAuthStateChange.listen(
-        (state) => update(state.session?.user), onError: showError,
-      );
-      update(supabase.auth.currentUser);
-    }
+    }, onError: showError);
   }
 
   void showAccount(String? id, String label) {
@@ -139,7 +123,7 @@ class _StudentsPageState extends State<StudentsPage> {
       rows = [];
     });
     if (id == null) return;
-    if (live && firebase) {
+    if (live) {
       dataChanges = latest.onValue.listen((event) {
         if (mounted && view == current) {
           request++;
@@ -148,17 +132,6 @@ class _StudentsPageState extends State<StudentsPage> {
       }, onError: (Object error) {
         if (view == current) showError(error);
       });
-    } else if (live) {
-      channel = supabase.channel('mobile-students-$current')
-        .onPostgresChanges(
-          event: sb.PostgresChangeEvent.all, schema: 'public', table: 'lab_students',
-          callback: (_) { if (view == current) unawaited(refresh()); },
-        )
-        .subscribe((status, error) {
-          if (view != current || !mounted) return;
-          if (status == sb.RealtimeSubscribeStatus.subscribed) unawaited(refresh());
-          if (error != null) showError(error);
-        });
     } else {
       unawaited(refresh());
     }
@@ -172,10 +145,7 @@ class _StudentsPageState extends State<StudentsPage> {
   Future<void> refresh() async {
     final current = view, read = ++request;
     try {
-      final records = firebase
-          ? decode(await latest.get())
-          : await supabase.from('lab_students').select('name,major,gradYear')
-              .order('id', ascending: false).limit(100);
+      final records = decode(await latest.get());
       if (mounted && view == current && request == read) setState(() => rows = records);
     } catch (error) {
       if (view == current && request == read) showError(error);
@@ -199,15 +169,6 @@ class _StudentsPageState extends State<StudentsPage> {
   }
 
   Future<void> login(String provider) async {
-    if (!firebase) {
-      final option = switch (provider) {
-        'github' => sb.OAuthProvider.github,
-        'google' => sb.OAuthProvider.google,
-        _ => sb.OAuthProvider.apple,
-      };
-      await supabase.auth.signInWithOAuth(option, redirectTo: 'studentslab://auth');
-      return;
-    }
     if (provider == 'yandex' || provider == 'vk') {
       await loginExternal(provider);
     } else if (provider == 'google') {
@@ -231,11 +192,7 @@ class _StudentsPageState extends State<StudentsPage> {
     final row = {
       'name': name.text.trim(), 'major': major.text.trim(), 'gradYear': int.parse(year.text.trim()),
     };
-    if (firebase) {
-      await students.push().set(row);
-    } else {
-      await supabase.from('lab_students').insert(row);
-    }
+    await students.push().set(row);
     if (!mounted || current != view) return;
     name.clear();
     major.clear();
@@ -269,24 +226,19 @@ class _StudentsPageState extends State<StudentsPage> {
           observe();
         },
       ),
-      if (!configured) const Text('Добавьте настройки подключения согласно README.'),
+      if (!configured) const Text('Добавьте настройки подключения Firebase согласно README.'),
       if (configured && account == null)
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final entry in providers.entries)
             OutlinedButton(
-              onPressed: busy || (!firebase && ['vk', 'yandex'].contains(entry.key))
-                  ? null : () => run(() => login(entry.key)),
+              onPressed: busy ? null : () => run(() => login(entry.key)),
               child: Text(entry.value),
             ),
         ]),
       if (account != null) ...[
         Text('Вы вошли как $account', style: Theme.of(context).textTheme.titleLarge),
         OutlinedButton(onPressed: busy ? null : () => run(() async {
-          if (firebase) {
-            await auth.signOut();
-          } else {
-            await supabase.auth.signOut(scope: sb.SignOutScope.local);
-          }
+          await auth.signOut();
         }), child: const Text('Выйти')),
         Form(key: form, child: Column(children: [
           TextFormField(controller: name, maxLength: 100,

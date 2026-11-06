@@ -1,78 +1,189 @@
-# Студенты
+# Студенты (Firebase Realtime Database)
 
-Учебный проект по мобильной разработке. Форма из задания сохраняет имя, специальность и год выпуска. После входа приложение показывает имя пользователя, список студентов, форму добавления и кнопку «Выйти».
+Учебный проект по мобильной и веб-разработке. Форма сохраняет имя студента, специальность и год выпуска. После входа отображается профиль пользователя, список студентов, форма добавления новой записи и кнопка «Выйти». Вся работа происходит исключительно с реальной облачной базой данных Firebase.
 
-## 1. Запуск веб-демонстрации
+---
 
-Откройте PowerShell в папке проекта и выполните:
+## 1. Запуск веб-приложения
 
+### Локальный запуск
+Для локального запуска веб-версии выполните в PowerShell:
 ```powershell
+python preview.py
+# или при наличии Node.js:
 node preview.cjs
 ```
+Сервер запустится по адресу [http://127.0.0.1:8085/](http://127.0.0.1:8085/) (или 8080).
 
-Откройте [http://127.0.0.1:8080/](http://127.0.0.1:8080/). Локальная демонстрация включена по умолчанию. Она хранит вымышленные учебные записи в браузере и имитирует авторизацию. Облачные режимы работают после настройки собственных проектов и отключения галочки «Локальная демонстрация».
+### Публичный запуск на GitHub Pages
+Страница развернута и доступна по адресу:
+👉 **[https://klixim.github.io/new-flutter-repo/](https://klixim.github.io/new-flutter-repo/)**
+
+### Режимы работы с базой данных
+В приложении доступны 2 режима взаимодействия с Firebase:
 
 | Вариант | Чтение | Добавление | Что происходит при записи из другой вкладки |
 | --- | --- | --- | --- |
-| Supabase без Realtime | `select()` | `insert()` | Нужно нажать «Обновить список» |
-| Supabase с Realtime | `select()` | `insert()` | `postgres_changes` запускает повторный `select()` |
-| Firebase без Realtime | `get()` | `push()` | Нужно нажать «Обновить список» |
-| Firebase с Realtime | `onValue()` | `push()` | `onValue()` передаёт новый снимок списка |
+| **Firebase · без Realtime** | `get()` | `push()` | Список обновляется вручную по кнопке «Обновить список» |
+| **Firebase · с Realtime** | `onValue()` | `push()` | Мгновенное обновление по WebSocket во всех открытых вкладках |
 
-**Проверка.** Откройте две вкладки с одним адресом. В первой выберите ручной режим, во второй выберите Realtime той же базы. Войдите в обеих вкладках и добавьте запись в первой. Во второй она появится автоматически. Добавьте другую запись во второй и убедитесь, что в первой она появится только после ручного обновления. Повторите с другой базой. Облачные списки Supabase и Firebase независимы.
+> **Проверка Realtime:** Откройте две вкладки сайта. В первой выберите «без Realtime», во второй — «с Realtime». Авторизуйтесь в обеих. При добавлении студента из первой вкладки во второй он появится мгновенно без перезагрузки страницы!
 
-## 2. Supabase
+---
 
-1. Создайте проект в [Supabase Dashboard](https://supabase.com/dashboard). В SQL Editor выполните `setup/supabase.sql`. Скрипт создаёт отдельную таблицу `public.lab_students`, выдаёт вошедшим пользователям права на чтение и добавление, включает RLS и добавляет таблицу в публикацию `supabase_realtime`.
-2. Укажите Project URL и publishable key в `config.supabaseUrl` и `config.supabaseKey` внутри `docs/index.html`.
-3. В **Authentication → URL Configuration** укажите адрес сайта и разрешите возврат на адрес страницы. При точной настройке добавьте варианты URL с `?cloud=1&mode=supabase-manual` и `?cloud=1&mode=supabase-live`. Для Flutter добавьте `studentslab://auth`.
-4. В **Authentication → Sign In / Providers** включите Google, GitHub и Apple. Для OAuth-приложений у провайдеров используйте callback, показанный в настройках Supabase, обычно `https://PROJECT.supabase.co/auth/v1/callback`. Укажите Client ID и секреты в кабинете Supabase. Подробности есть в документации [Google](https://supabase.com/docs/guides/auth/social-login/auth-google), [GitHub](https://supabase.com/docs/guides/auth/social-login/auth-github) и [Apple](https://supabase.com/docs/guides/auth/social-login/auth-apple).
+## 2. Пошаговая инструкция: Как подключить Firebase к https://klixim.github.io/new-flutter-repo/
 
-## 3. Firebase
+Чтобы приложение на GitHub Pages работало с вашей собственной базой данных Firebase и авторизацией, выполните следующие шаги:
 
-1. В [Firebase Console](https://console.firebase.google.com/) войдите в Google, создайте проект и выберите **Project settings → Your apps → Web (`</>`) → Register app**. Analytics для задания можно оставить выключенным.
-2. Создайте **Realtime Database** в Locked mode. На вкладке **Rules** опубликуйте `setup/database.rules.json` для нового проекта. В существующем проекте добавьте ветку `lab_students` к своим правилам, сохранив правила других веток. Для ограничения прав на `lab_students` корень не должен предоставлять широкий доступ. Правила из примера позволяют вошедшим читать учебный список и создавать новые записи с тремя полями.
-3. Скопируйте `firebaseConfig` своего Web App в `config.firebase` внутри `docs/index.html`. Включите в него `databaseURL` из Realtime Database.
-4. В **Authentication → Sign-in method** включите Google, GitHub и Apple. GitHub и Apple настраиваются отдельными OAuth-данными и Firebase callback вида `https://PROJECT.firebaseapp.com/__/auth/handler`. Для Apple потребуются реквизиты Apple Developer, перечисленные в инструкции Firebase. В **Authentication → Settings → Authorized domains** добавьте `USERNAME.github.io`, а для локального облачного запуска добавьте имя хоста, которое используете в браузере. [Google](https://firebase.google.com/docs/auth/web/google-signin) · [GitHub](https://firebase.google.com/docs/auth/web/github-auth) · [Apple](https://firebase.google.com/docs/auth/web/apple).
-5. Используйте собственные проекты. На скриншотах преподавателя видны пример конфигурации и база `students`, а в этом проекте используется отдельная ветка `lab_students`. В клиентский HTML помещается публичная конфигурация. Сервисный ключ Firebase и OAuth-секреты хранятся на сервере или в кабинетах провайдеров.
+### Шаг 1. Создание проекта в Firebase Console
+1. Перейдите в [Firebase Console](https://console.firebase.google.com/) и войдите под вашим Google-аккаунтом.
+2. Нажмите **«Добавить проект»** (Add project).
+3. Введите название проекта (например, `students-lab-app`), нажмите «Продолжить».
+4. Google Analytics можно отключить (для учебного проекта не требуется) и нажмите **«Создать проект»**.
 
-## 4. Яндекс ID и VK ID
+---
 
-Кнопки используют отдельный OAuth-сервер. Сервер проверяет `state` и браузерную сессию, обменивает код провайдера с PKCE и запрашивает профиль. Для доступа к учебному списку Firebase выдаёт приложению сессию по серверному custom token. В браузере и Flutter выберите режим Firebase. При веб-входе возврат по умолчанию ведёт в режим Firebase Realtime.
+### Шаг 2. Регистрация Web App и получение конфигурации
+1. На главной странице проекта в Firebase Console нажмите на иконку веба **`</>`** (или перейдите в **Project settings → General → Your apps → Add app → Web**).
+2. В поле «Псевдоним приложения» (App nickname) укажите, например, `Students Web`.
+3. Флажок «Firebase Hosting» ставить **не нужно** (хостинг осуществляется через GitHub Pages). Нажмите **«Зарегистрировать приложение»**.
+4. В блоке `const firebaseConfig = { ... };` скопируйте значения параметров:
+   - `apiKey`
+   - `authDomain`
+   - `projectId`
+   - `storageBucket`
+   - `messagingSenderId`
+   - `appId`
+5. Откройте файл `docs/index.html` в вашем репозитории и вставьте скопированные значения в объект `config.firebase`:
+   ```javascript
+   const config = {
+     firebase: {
+       apiKey: "ВАШ_API_KEY",
+       authDomain: "ВАШ_PROJECT_ID.firebaseapp.com",
+       projectId: "ВАШ_PROJECT_ID",
+       storageBucket: "ВАШ_PROJECT_ID.firebasestorage.app",
+       messagingSenderId: "ВАШ_SENDER_ID",
+       appId: "ВАШ_APP_ID",
+       databaseURL: "https://ВАШ_PROJECT_ID-default-rtdb.europe-west1.firebasedatabase.app", // см. Шаг 3
+     },
+     oauthServer: '',
+   };
+   ```
 
-1. Создайте приложения в [Яндекс OAuth](https://oauth.yandex.ru/client/new) и [VK ID](https://id.vk.ru/about/business). Для Яндекса нужен доступ `login:info`. Зарегистрируйте точные HTTPS callback URL `https://ВАШ-СЕРВЕР/callback/yandex` и `https://ВАШ-СЕРВЕР/callback/vk` соответственно. Для VK укажите домен сервера и веб-платформу.
-2. Разместите папку `oauth` на Node.js-хостинге с HTTPS. Скопируйте `.env.example` в `.env`. Заполните `PUBLIC_ORIGIN`, `WEB_RETURN`, данные Яндекс/VK и подключите Firebase Admin с учётными данными **того же** Firebase-проекта. Для учебного запуска используйте один экземпляр сервера, поскольку незавершённые входы и одноразовые коды находятся в памяти процесса.
-3. Из `oauth` выполните `npm ci`, затем `npm start`. Запрос `GET /health` должен вернуть `{"ok":true}`. Укажите `config.oauthServer` в HTML и `OAUTH_URL` при запуске Flutter. На GitHub Pages публикуется только папка `docs`.
+---
 
-Документация: [Яндекс ID](https://yandex.ru/dev/id/doc/ru/codes/code-url), [VK ID SDK](https://github.com/VKCOM/vkid-web-sdk/blob/master/src/auth/auth.ts), [Firebase custom tokens](https://firebase.google.com/docs/auth/admin/create-custom-tokens).
+### Шаг 3. Создание и настройка Realtime Database
+1. В левом меню Firebase Console перейдите в раздел **Build → Realtime Database** и нажмите **«Create Database»** (Создать базу данных).
+2. Выберите регион (рекомендуется **Belgium / `europe-west1`** или `us-central`).
+3. Выберите **«Start in locked mode»** (Начать в заблокированном режиме) и нажмите «Включить».
+4. Скопируйте полученный URL базы данных (отображается над таблицей, вида `https://<project-id>-default-rtdb.europe-west1.firebasedatabase.app`) и вставьте его в поле `databaseURL` в `docs/index.html`.
+5. Перейдите на вкладку **«Rules»** (Правила) в Realtime Database, замените содержимое на правила из файла `setup/database.rules.json`:
+   ```json
+   {
+     "rules": {
+       ".read": false,
+       ".write": false,
+       "lab_students": {
+         ".read": "auth != null",
+         "$student": {
+           ".write": "auth != null && !data.exists() && newData.exists()",
+           ".validate": "newData.hasChildren(['name', 'major', 'gradYear'])",
+           "name": { ".validate": "newData.isString() && newData.val().matches(/.*\\S.*/) && newData.val().length <= 100" },
+           "major": { ".validate": "newData.isString() && newData.val().matches(/.*\\S.*/) && newData.val().length <= 120" },
+           "gradYear": { ".validate": "newData.isNumber() && newData.val() % 1 == 0 && newData.val() >= 1900 && newData.val() <= 2200" },
+           "$other": { ".validate": false }
+         }
+       }
+     }
+   }
+   ```
+6. Нажмите **«Publish»** (Опубликовать).
 
-## 5. GitHub Pages
+> Данные правила разрешают авторизованным пользователям читать ветку `lab_students` и добавлять студентов с валидацией имени, специальности и года выпуска.
 
-1. В ветке `main` стартовая страница находится в `docs/index.html`.
-2. В **Settings → Pages → Build and deployment** выберите **Deploy from a branch**, `main` и `/docs`.
-3. Проверьте адрес из Pages, обычно `https://klixim.github.io/new-flutter-repo/`. Для прямого открытия настроенного облачного режима добавьте к адресу `?cloud=1&mode=firebase-live`. [Инструкция GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+---
 
-## 6. Flutter
+### Шаг 4. Настройка способов входа (Authentication)
+1. В левом меню перейдите в **Build → Authentication** и нажмите **«Get started»** (Начать).
+2. На вкладке **«Sign-in method»** включите необходимые провайдеры:
+   - **Google**: Нажмите на Google, переведите переключатель в положение «Включено», укажите публичное имя проекта и email службы поддержки, затем нажмите «Сохранить».
+   - **GitHub**:
+     1. Включите GitHub. Firebase покажет вам **Authorization callback URL** (вида `https://<project-id>.firebaseapp.com/__/auth/handler`).
+     2. В новой вкладке откройте [GitHub Developer Settings → OAuth Apps](https://github.com/settings/developers).
+     3. Нажмите **«New OAuth App»**.
+     4. Укажите:
+        - Application name: `Students Lab`
+        - Homepage URL: `https://klixim.github.io/new-flutter-repo/`
+        - Authorization callback URL: вставьте скопированный из Firebase адрес `https://<project-id>.firebaseapp.com/__/auth/handler`.
+     5. Нажмите «Register application», сгенерируйте Client Secret и скопируйте **Client ID** и **Client Secret** в соответствующие поля в Firebase Console, затем сохраните.
+   - **Анонимный вход (Anonymous)**: Включите провайдер «Anonymous». Это позволит вам и преподавателю тестировать добавление студентов в один клик без ввода паролей или настройки OAuth.
 
-В `mobile` находятся код приложения и зависимости. Для Android нужны Flutter SDK, Android SDK и эмулятор или телефон. Для iOS нужны macOS и Xcode.
+---
 
-1. Выполните `flutter pub get` из папки `mobile`. Проекты Android и iOS уже находятся в репозитории.
-2. Для Firebase зарегистрируйте Android App с package name `org.studentlab.students_lab`, добавьте SHA-1/SHA-256 сертификата сборки и положите `google-services.json` в `mobile/android/app/`. Gradle подключит Google Services, когда файл присутствует. Для iOS зарегистрируйте Bundle ID `org.studentlab.studentsLab`, добавьте `GoogleService-Info.plist` в цель Runner и внесите значение `REVERSED_CLIENT_ID` в URL Types для Google. Для входа через Apple настройте Sign in with Apple capability в Xcode.
-3. Добавьте `studentslab://auth` в **Supabase → Authentication → URL Configuration → Redirect URLs**. Этот адрес уже внесён в конфигурацию Android и iOS.
-4. Запустите с публичной конфигурацией проекта. Параметр `GOOGLE_SERVER_CLIENT_ID` содержит Web OAuth Client ID Google, если он не подхватывается из платформенной конфигурации. Параметр `OAUTH_URL` нужен для Яндекса и VK.
+### Шаг 5. ОБЯЗАТЕЛЬНО: Авторизация домена GitHub Pages
+По умолчанию Firebase Auth блокирует всплывающие окна авторизации на неизвестных доменах (`auth/unauthorized-domain`).
 
-```powershell
-flutter run --dart-define=SUPABASE_URL=https://PROJECT.supabase.co --dart-define=SUPABASE_KEY=sb_publishable_REPLACE --dart-define=FIREBASE_DATABASE_URL=https://studyflutter-6a402-default-rtdb.europe-west1.firebasedatabase.app --dart-define=GOOGLE_SERVER_CLIENT_ID=REPLACE.apps.googleusercontent.com --dart-define=OAUTH_URL=https://oauth.example.com
-```
+1. В разделе **Authentication** перейдите на вкладку **«Settings»** (Настройки).
+2. Выберите пункт меню **«Authorized domains»** (Авторизованные домены).
+3. Нажмите **«Add domain»** (Добавить домен).
+4. Введите домен GitHub Pages:
+   ```text
+   klixim.github.io
+   ```
+5. Нажмите «Добавить». Убедитесь, что в списке присутствуют:
+   - `localhost` (для локальной проверки)
+   - `klixim.github.io` (для GitHub Pages)
+   - `<project-id>.firebaseapp.com`
 
-[Flutter и Firebase](https://firebase.google.com/docs/flutter/setup) · [Вход через провайдеров во Flutter](https://firebase.google.com/docs/auth/flutter/federated-auth) · [Глубокие ссылки Supabase](https://supabase.com/docs/guides/auth/native-mobile-deep-linking)
+---
 
-## 7. Как работает Realtime
+### Шаг 6. Публикация изменений на GitHub
+1. Сохраните изменения в репозитории:
+   ```powershell
+   git add docs/index.html mobile/ setup/ tests/ README.md
+   git commit -m "Configure Firebase for GitHub Pages and remove demo mode"
+   git push origin main
+   ```
+2. Проверьте настройки GitHub Pages в вашем репозитории:
+   - Откройте страницу репозитория на GitHub: **Settings → Pages**.
+   - В блоке **Build and deployment**:
+     - **Source**: `Deploy from a branch`
+     - **Branch**: `main`
+     - **Folder**: `/docs`
+   - Нажмите **Save**.
+3. Через 1–2 минуты страница обновится по адресу:
+   **[https://klixim.github.io/new-flutter-repo/](https://klixim.github.io/new-flutter-repo/)**
 
-**Firebase Realtime Database** хранит дерево JSON. `onValue(query, callback)` сначала передаёт снимок текущего списка, затем передаёт его снова после изменений по этому пути. `get(query)` читает список один раз, `push(ref, row)` добавляет запись с новым ключом. Функция, возвращённая `onValue()`, отписывает слушателя. Во Flutter те же шаги выполняют `get()`, `push().set()` и `onValue.listen()`, а подписку закрывает `cancel()`. [Документация Firebase](https://firebase.google.com/docs/database/web/read-and-write).
+---
 
-**Supabase Realtime** читает изменения PostgreSQL из публикации `supabase_realtime`. Для таблицы `public.lab_students` нужны доступ на `SELECT` и разрешающая RLS-политика. JavaScript-клиент вызывает `channel(...).on('postgres_changes', {event:'*', schema:'public', table:'lab_students'}, callback).subscribe()`. После статуса `SUBSCRIBED` приложение загружает начальный список. Каждое событие запускает повторный `select()`. При выходе и смене режима вызывается `removeChannel()`. Во Flutter обработчик называется `onPostgresChanges()`. [Документация Supabase](https://supabase.com/docs/guides/realtime/postgres-changes).
+## 3. Яндекс ID и VK ID (Опционально)
 
-## Проверено локально
+Для входа через российские сервисы Яндекс ID и VK ID в Firebase используется обмен кодов на Custom Tokens через вспомогательный сервер `oauth/server.mjs`.
 
-В двух вкладках проверены все четыре варианта с учебными данными: вход, добавление, ручное обновление, доставка обновления во вторую вкладку и выход. Вход в облачные аккаунты, развёртывание на GitHub Pages и сборка Flutter требуют окружения и настроек владельца. Облачная интеграция с XupaStack не проверялась.
+1. Создайте приложения в [Яндекс OAuth](https://oauth.yandex.ru/client/new) и [VK ID](https://id.vk.ru/about/business).
+2. Разверните сервис из папки `oauth/` на любом Node.js хостинге с HTTPS (например, Railway, Render).
+3. Укажите публичный адрес сервера в `config.oauthServer` внутри `docs/index.html`.
+
+---
+
+## 4. Мобильное приложение (Flutter)
+
+Код мобильного приложения находится в каталоге `mobile/`.
+
+1. Запустите получение зависимостей:
+   ```powershell
+   cd mobile
+   flutter pub get
+   ```
+2. Для сборки с вашей базой данных передайте URL базы через `--dart-define`:
+   ```powershell
+   flutter run --dart-define=FIREBASE_DATABASE_URL=https://ВАШ_PROJECT_ID-default-rtdb.europe-west1.firebasedatabase.app
+   ```
+3. Для полной интеграции с Firebase на Android добавьте файл `google-services.json` (скачивается в Project settings -> Your apps -> Android) в папку `mobile/android/app/`.
+
+---
+
+## 5. Как устроен Firebase Realtime
+- **Чтение списка:** `get(latest)` выполняет однократный HTTP-запрос к Realtime Database REST API / протоколу и возвращает последние 100 записей.
+- **Добавление записи:** `push(students, row)` генерирует уникальный лексикографический ключ на стороне сервера и сохраняет запись студента.
+- **Realtime-подписка:** `onValue(latest, callback)` устанавливает постоянное двустороннее WebSocket-соединение с Firebase. При любом изменении ветки `lab_students` сервер автоматически отправляет актуальный срез данных подписчикам без необходимости повторных запросов со стороны клиента.
